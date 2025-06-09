@@ -6,7 +6,7 @@ from urllib.parse import urlparse, quote
 import os
 import re
 import random 
-import json 
+import json # Importar json é CRÍTICO!
 
 app = Flask(__name__)
 CORS(app) 
@@ -19,7 +19,7 @@ WHATSAPP_PHONE_NUMBER = "5581973085768"
 # EXTREMAMENTE IMPORTANTE: Seletores são sensíveis a mudanças no site.
 # Se um site mudar sua estrutura HTML, você precisará atualizar os seletores aqui.
 SITE_SELECTORS = {
-    "amazon.com": {
+    "amazon.com": { # Mantido .com pois o .com.br redireciona ou usa similar
         "title": "#productTitle",
         "price": "span.a-price span.a-offscreen", 
         "old_price": "span.a-text-price span.a-offscreen", 
@@ -80,11 +80,11 @@ def clean_price(price_text):
     price_text = price_text.replace(" ", "").replace("\n", "")
     price_text = re.sub(r'^[^\d\.,]*', '', price_text) 
 
-    if re.search(r',\d{2}$', price_text):
-        price_text = price_text.replace('.', '').replace(',', '.')
-    elif re.search(r'\.\d{2}$', price_text):
-        price_text = price_text.replace(',', '') 
-    else: 
+    if re.search(r',\d{2}$', price_text): # Se termina com , seguido de 2 dígitos (ex: 123,45)
+        price_text = price_text.replace('.', '').replace(',', '.') # Remove . e troca , por .
+    elif re.search(r'\.\d{2}$', price_text): # Se termina com . seguido de 2 dígitos (ex: 123.45)
+        price_text = price_text.replace(',', '') # Remove a vírgula (para casos como 1.000,00)
+    else: # Outros casos, como sem centavos, ou formato 1.000,00
         price_text = price_text.replace('.', '').replace(',', '')
     
     match = re.search(r'(\d+\.?\d*)', price_text)
@@ -139,23 +139,29 @@ def extract_product_info(url):
         old_price_raw = extract_text(soup, selectors.get("old_price", ""))
         old_price = clean_price(old_price_raw)
         
+        # --- Lógica de Correção de Preços ---
         try:
             current_price_float = float(price) if price else 0.0
             old_price_float = float(old_price) if old_price else 0.0
 
+            # Se o preço antigo for maior que 0 e menor que o preço atual, inverte.
+            # Isso corrige casos onde o "De" e "Por" são lidos na ordem errada.
             if old_price_float > 0.0 and current_price_float > 0.0 and old_price_float < current_price_float:
                 price, old_price = old_price, price 
                 current_price_float, old_price_float = old_price_float, current_price_float 
             
+            # Se o preço antigo for igual ao atual ou 0, não exibe o preço antigo.
             if old_price_float == current_price_float or old_price_float == 0.0:
                 old_price = ""
 
         except ValueError:
-            old_price = "" 
+            # Em caso de erro na conversão para float, apenas ignora e mantém os valores originais
+            old_price = "" # Limpa old_price para evitar exibição incorreta
             pass
             
         image = extract_attr(soup, selectors["image"], "src")
         
+        # Lógica para extrair imagens de diferentes atributos (data-a-dynamic-image, data-src)
         if not image: 
             data_image_str = extract_attr(soup, selectors["image"], "data-a-dynamic-image")
             if data_image_str:
@@ -172,7 +178,6 @@ def extract_product_info(url):
             base_url = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
             image = base_url.rstrip('/') + '/' + image.lstrip('/')
 
-        # Esta é a linha CRÍTICA para a variável 'description'
         description = extract_text(soup, selectors.get("description", ""))
 
         product = {
@@ -198,6 +203,11 @@ def extract_product_info(url):
         return {"error": f"Erro inesperado ao processar o link. Tente novamente mais tarde. Detalhes: {e}"}
 
 def generate_whatsapp_link(product_info):
+    """
+    Gera o link para compartilhar no WhatsApp com base nas informações do produto,
+    com a estrutura detalhada solicitada, cupom aleatório e nome da loja.
+    O link gerado será para o número de telefone especificado.
+    """
     title = product_info.get('title', 'Produto').replace('*', '').replace('_', '') 
     price = product_info.get('price', 'Preço não disponível')
     old_price = product_info.get('old_price', '') 
@@ -205,6 +215,7 @@ def generate_whatsapp_link(product_info):
     url = product_info['url'] 
     store_name = product_info.get('store_name', '') 
     
+    # --- Geração de Cupom Aleatório ---
     coupon_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     coupon_length = 8 
     random_coupon = ''.join(random.choice(coupon_chars) for i in range(coupon_length))
@@ -212,37 +223,48 @@ def generate_whatsapp_link(product_info):
     
     whatsapp_message_parts = []
 
+    # 1. Título do produto
     whatsapp_message_parts.append(f"*{title}*") 
-    whatsapp_message_parts.append("") 
+    whatsapp_message_parts.append("") # Linha em branco para espaçamento
 
+    # 2. Preço "De" (riscado)
     if old_price and old_price != "Preço não disponível":
         try:
-            if float(old_price) > float(price):
+            if float(old_price) > 0: # Apenas mostra se houver um preço antigo válido
                 whatsapp_message_parts.append(f"~De {currency}{old_price}~")
         except ValueError:
             pass 
         
+    # 3. Preço "Por" com destaque e "no Pix"
     whatsapp_message_parts.append(f"*Por {currency}{price} no Pix*")
     
-    whatsapp_message_parts.append("") 
+    # 4. Cupom de desconto (sempre gerado)
+    whatsapp_message_parts.append("") # Linha em branco antes do cupom
     whatsapp_message_parts.append(f"({CUPOM_TEXT})")
 
-    whatsapp_message_parts.append("") 
+    # 5. Link do Produto
+    whatsapp_message_parts.append("") # Linha em branco antes do link
     whatsapp_message_parts.append("🛒 Link do Produto ⤵️")
     whatsapp_message_parts.append(url) 
     
+    # 6. Texto da Loja (agora dinâmico com o nome da loja)
     if store_name:
         whatsapp_message_parts.append(f"\n🛒 Na {store_name}!!!") 
 
+    # 7. Assinatura
     whatsapp_message_parts.append("Via ProdLink!") 
 
     message_for_whatsapp = "\n".join(whatsapp_message_parts)
     
+    # --- ENVIAR PARA O NÚMERO INDIVIDUAL ---
     whatsapp_url = f"https://api.whatsapp.com/send?phone={WHATSAPP_PHONE_NUMBER}&text={quote(message_for_whatsapp)}"
     return whatsapp_url
 
 @app.route('/api/process_product_link', methods=['POST'])
 def process_product_link():
+    """
+    Endpoint da API que recebe a URL do frontend, processa e retorna as informações.
+    """
     data = request.get_json()
     url = data.get('url', '').strip()
     
@@ -264,6 +286,7 @@ def process_product_link():
 
 @app.route('/')
 def home():
+    """Rota de teste simples para verificar se o backend está online."""
     return "ProdLink Backend está online! Use a rota /api/process_product_link para processar links."
 
 if __name__ == '__main__':
