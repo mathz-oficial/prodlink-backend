@@ -5,17 +5,22 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import os
 import re
+import random 
 
 app = Flask(__name__)
 CORS(app) 
 
 # --- Configurações Importantes ---
-WHATSAPP_PHONE_NUMBER = os.environ.get("WHATSAPP_PHONE_NUMBER", "558193085768") 
-WHATSAPP_API_URL = "https://api.whatsapp.com/send"
+# Não usaremos mais WHATSAPP_PHONE_NUMBER diretamente.
+# Em vez disso, usaremos o link de convite do grupo.
+# **SUBSTITUA "SEU_LINK_DE_CONVITE_DO_GRUPO_AQUI" PELO SEU LINK REAL!**
+WHATSAPP_GROUP_INVITE_LINK = os.environ.get("WHATSAPP_GROUP_INVITE_LINK", "vhttps://chat.whatsapp.com/ByyFqFS3mkoAw6jFlBxFmG") 
+
+# WHATSAPP_API_URL não será mais usado diretamente para criar o link,
+# pois o link de convite já inclui a base.
+# WHATSAPP_API_URL = "https://api.whatsapp.com/send" 
 
 # Dicionário com seletores CSS para extrair informações dos sites.
-# EXTREMAMENTE IMPORTANTE: Seletores são sensíveis a mudanças no site.
-# Se um site mudar sua estrutura HTML, você precisará atualizar os seletores aqui.
 SITE_SELECTORS = {
     "amazon.com": {
         "title": "#productTitle",
@@ -44,20 +49,18 @@ SITE_SELECTORS = {
         "description": ".product-description-content", 
         "store_name": "AliExpress" 
     },
-    "shopee.com.br": { # **ATENÇÃO: Seletores da Shopee são muito voláteis!**
-        "title": "div[class^='_2EB2pM'], div[class^='_3O_Lg'], ._3yC_eA", # Tentativa de seletores para título
-        "price": "div[class^='_2fXkC'], ._3gUuT", # Tentativa de seletores para preço
-        "old_price": "div[class^='_2o8hA'], ._3gUuT.line-through", # Tentativa de seletores para preço riscado
-        "image": "div[class^='_2l-C4'] img, ._2aB7J img", # Tentativa de seletores para imagem
-        "currency": "", # A Shopee geralmente já inclui o R$ no preço
-        "description": "div[class^='_3gUuT'], ._3gUuT", # Tentativa de seletores para descrição
+    "shopee.com.br": { 
+        "title": "div[class^='_2EB2pM'], div[class^='_3O_Lg'], ._3yC_eA", 
+        "price": "div[class^='_2fXkC'], ._3gUuT", 
+        "old_price": "div[class^='_2o8hA'], ._3gUuT.line-through", 
+        "image": "div[class^='_2l-C4'] img, ._2aB7J img", 
+        "currency": "", 
+        "description": "div[class^='_3gUuT'], ._3gUuT", 
         "store_name": "Shopee"
     },
 }
 
 def extract_text(soup, selector):
-    """Extrai o texto de um elemento usando um seletor CSS."""
-    # Para Shopee e outros que podem ter múltiplos seletores, tentamos um por um
     if isinstance(selector, list):
         for s in selector:
             element = soup.select_one(s)
@@ -69,7 +72,6 @@ def extract_text(soup, selector):
         return element.get_text(strip=True) if element else ""
 
 def extract_attr(soup, selector, attr):
-    """Extrai um atributo (ex: 'src' de uma imagem) de um elemento."""
     if isinstance(selector, list):
         for s in selector:
             element = soup.select_one(s)
@@ -81,7 +83,6 @@ def extract_attr(soup, selector, attr):
         return element[attr] if element and attr in element.attrs else ""
 
 def clean_price(price_text):
-    """Limpa o texto do preço, removendo caracteres indesejados e formatando."""
     price_text = price_text.replace(" ", "").replace("\n", "").replace(",", ".")
     match = re.search(r'(\d[\d\.,]*)', price_text)
     if match:
@@ -90,10 +91,6 @@ def clean_price(price_text):
     return ""
 
 def extract_product_info(url):
-    """
-    Faz o scraping das informações do produto de uma URL.
-    Tenta ser mais robusto na extração de preço e imagem.
-    """
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -116,8 +113,6 @@ def extract_product_info(url):
         if not selectors:
             return {"error": "Site não suportado. Tente Amazon, Mercado Livre, AliExpress ou Shopee."}
         
-        # --- Extração de dados ---
-        # Passa a lista de seletores para as funções de extração
         title = extract_text(soup, selectors["title"])
         price_raw = extract_text(soup, selectors["price"])
         price = clean_price(price_raw) 
@@ -166,7 +161,8 @@ def extract_product_info(url):
 def generate_whatsapp_link(product_info):
     """
     Gera o link para compartilhar no WhatsApp com base nas informações do produto,
-    com a estrutura de pré-visualização do link e texto abaixo.
+    com a estrutura detalhada solicitada, cupom aleatório e nome da loja.
+    O link gerado será para o grupo de WhatsApp especificado.
     """
     title = product_info.get('title', 'Produto').replace('*', '').replace('_', '') 
     price = product_info.get('price', 'Preço não disponível')
@@ -175,27 +171,50 @@ def generate_whatsapp_link(product_info):
     url = product_info['url'] 
     store_name = product_info.get('store_name', '') 
     
+    # --- Geração de Cupom Aleatório ---
+    coupon_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    coupon_length = 8 
+    random_coupon = ''.join(random.choice(coupon_chars) for i in range(coupon_length))
+    CUPOM_TEXT = f"🔖Utilize o Cupom: {random_coupon}" 
+    
+    SUA_ASSINATURA = "~ Seu Nome Aqui" # SUBSTITUA PELO SEU NOME REAL AQUI
+    
     whatsapp_message_parts = []
+
+    # 1. Título do produto
     whatsapp_message_parts.append(f"*{title}*") 
+    whatsapp_message_parts.append("") # Linha em branco para espaçamento
 
+    # 2. Preço "De" (riscado)
     if old_price and old_price != "Preço não disponível" and old_price != price:
-        whatsapp_message_parts.append(f"De: {currency}{old_price}")
+        whatsapp_message_parts.append(f"~De {currency}{old_price}~")
     
-    whatsapp_message_parts.append(f"Por: {currency}{price}")
+    # 3. Preço "Por" com destaque e "no Pix"
+    whatsapp_message_parts.append(f"*Por {currency}{price} no Pix*")
+    
+    # 4. Cupom de desconto (sempre gerado)
+    whatsapp_message_parts.append("") # Linha em branco antes do cupom
+    whatsapp_message_parts.append(f"({CUPOM_TEXT})")
 
-    whatsapp_message_parts.append(f"Link do Produto\n{url}") 
-
-    whatsapp_message_parts.append("") # Linha em branco para separar
-
+    # 5. Link do Produto
+    whatsapp_message_parts.append("") # Linha em branco antes do link
+    whatsapp_message_parts.append("🛒 Link do Produto ⤵️")
+    whatsapp_message_parts.append(url) # O link em si, em nova linha para pré-visualização
+    
+    # 6. Texto da Loja (agora dinâmico)
     if store_name:
-        whatsapp_message_parts.append(f"Na {store_name}!!!")
+        whatsapp_message_parts.append(f"\n🛒 Na {store_name}!!!") # Usa o nome da loja extraído
 
-    # Adicionar sua assinatura (SUBSTITUA "Seu Nome Aqui" pelo seu nome ou apelido)
-    whatsapp_message_parts.append(f"~ 🚀 Via ProdLink!") 
+    # 7. Sua assinatura 
+    if SUA_ASSINATURA:
+        whatsapp_message_parts.append(f"{🚀 Via ProdLink!}") 
 
-    message = "\n".join(whatsapp_message_parts)
+    message_for_whatsapp = "\n".join(whatsapp_message_parts)
     
-    whatsapp_url = f"{WHATSAPP_API_URL}?phone={WHATSAPP_PHONE_NUMBER}&text={requests.utils.quote(message)}"
+    # --- MUDANÇA PRINCIPAL PARA ENVIAR PARA O GRUPO ---
+    # Usamos o link de convite do grupo e anexamos o texto codificado.
+    # O WhatsApp abrirá o grupo e a mensagem pré-preenchida para o usuário encaminhar.
+    whatsapp_url = f"{WHATSAPP_GROUP_INVITE_LINK}?text={requests.utils.quote(message_for_whatsapp)}"
     return whatsapp_url
 
 @app.route('/api/process_product_link', methods=['POST'])
