@@ -6,7 +6,7 @@ from urllib.parse import urlparse, quote
 import os
 import re
 import random 
-import json # Importar json para tratar imagens da Amazon
+import json # Importar json é CRÍTICO!
 
 app = Flask(__name__)
 CORS(app) 
@@ -21,11 +21,11 @@ WHATSAPP_PHONE_NUMBER = "5581973085768"
 SITE_SELECTORS = {
     "amazon.com": {
         "title": "#productTitle",
-        "price": "span.a-price span.a-offscreen", # Preço atual
-        "old_price": "span.a-text-price span.a-offscreen", # Preço anterior (riscado)
-        "image": "#landingImage, img#imgBliss, #imgTagWrapperId img", # Mais seletores para imagem
+        "price": "span.a-price span.a-offscreen", 
+        "old_price": "span.a-text-price span.a-offscreen", 
+        "image": "#landingImage, img#imgBliss, #imgTagWrapperId img", 
         "currency": "span.a-price-symbol", 
-        "description": "#productDescription span, #feature-bullets .a-list-item", # Mais seletores para descrição
+        "description": "#productDescription span, #feature-bullets .a-list-item", 
         "store_name": "Amazon" 
     },
     "mercadolivre.com.br": {
@@ -58,7 +58,6 @@ SITE_SELECTORS = {
 }
 
 def extract_text(soup, selector):
-    # Trata seletores que são strings com vírgulas (múltiplos seletores) ou listas de seletores
     selectors = selector.split(',') if isinstance(selector, str) and ',' in selector else [selector]
     for s in selectors:
         element = soup.select_one(s.strip())
@@ -67,7 +66,6 @@ def extract_text(soup, selector):
     return ""
 
 def extract_attr(soup, selector, attr):
-    # Trata seletores que são strings com vírgulas (múltiplos seletores) ou listas de seletores
     selectors = selector.split(',') if isinstance(selector, str) and ',' in selector else [selector]
     for s in selectors:
         element = soup.select_one(s.strip())
@@ -79,26 +77,16 @@ def clean_price(price_text):
     if not price_text:
         return ""
     
-    # Remove espaços, quebras de linha e caracteres de moeda/símbolos não numéricos no início
     price_text = price_text.replace(" ", "").replace("\n", "")
-    price_text = re.sub(r'^[^\d\.,]*', '', price_text) # Remove tudo que não é dígito, ponto ou vírgula do início
+    price_text = re.sub(r'^[^\d\.,]*', '', price_text) 
 
-    # Tenta limpar o preço para garantir que seja um número decimal válido
-    # Ex: "R$1.234,56" -> "1234.56"
-    # Ex: "1,234.56" -> "1234.56"
-    # Ex: "1.234" -> "1234"
-    # Ex: "1,23" -> "1.23"
-    
-    # Se o último separador for vírgula e houver 2 dígitos após, provavelmente é decimal
     if re.search(r',\d{2}$', price_text):
         price_text = price_text.replace('.', '').replace(',', '.')
-    # Se o último separador for ponto e houver 2 dígitos após, provavelmente é decimal
     elif re.search(r'\.\d{2}$', price_text):
-        price_text = price_text.replace(',', '') # Remove vírgulas de milhar
-    else: # Caso contrário, remove todas as vírgulas e pontos
+        price_text = price_text.replace(',', '') 
+    else: 
         price_text = price_text.replace('.', '').replace(',', '')
     
-    # Busca apenas o padrão numérico final
     match = re.search(r'(\d+\.?\d*)', price_text)
     if match:
         return match.group(1)
@@ -106,7 +94,6 @@ def clean_price(price_text):
 
 def extract_product_info(url):
     try:
-        # Headers mais completos para simular um navegador e tentar evitar bloqueios
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7",
@@ -115,8 +102,8 @@ def extract_product_info(url):
             "Connection": "keep-alive",
             "Upgrade-Insecure-Requests": "1"
         }
-        response = requests.get(url, headers=headers, timeout=20) # Aumentado timeout para 20s
-        response.raise_for_status() # Lança um erro HTTP para códigos de status de erro (4xx ou 5xx)
+        response = requests.get(url, headers=headers, timeout=20) 
+        response.raise_for_status() 
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
@@ -137,7 +124,6 @@ def extract_product_info(url):
         price_raw = extract_text(soup, selectors["price"])
         currency = extract_text(soup, selectors.get("currency", "")) 
         
-        # Tenta inferir a moeda se não encontrada via seletor
         if not currency:
             if "R$" in price_raw:
                 currency = "R$"
@@ -146,53 +132,48 @@ def extract_product_info(url):
             elif "€" in price_raw:
                 currency = "€"
             else:
-                currency = "R$" # Default para R$ se não encontrar
+                currency = "R$" 
 
         price = clean_price(price_raw) 
         
         old_price_raw = extract_text(soup, selectors.get("old_price", ""))
         old_price = clean_price(old_price_raw)
         
-        # **LÓGICA PARA CORRIGIR VALORES INVERTIDOS E TRATAR DE ERROS DE CONVERSÃO**
         try:
             current_price_float = float(price) if price else 0.0
             old_price_float = float(old_price) if old_price else 0.0
 
-            # Se old_price for menor que price (e ambos existirem e forem válidos), inverte-os
             if old_price_float > 0.0 and current_price_float > 0.0 and old_price_float < current_price_float:
-                price, old_price = old_price, price # Troca os valores string
-                current_price_float, old_price_float = old_price_float, current_price_float # Troca os floats para a lógica
+                price, old_price = old_price, price 
+                current_price_float, old_price_float = old_price_float, current_price_float 
             
-            # Se o "old_price" for igual ao "price" ou se for 0, limpa o "old_price"
             if old_price_float == current_price_float or old_price_float == 0.0:
                 old_price = ""
 
         except ValueError:
-            # Se a conversão para float falhar, apenas usa os valores brutos ou vazios
-            old_price = "" # Zera old_price para evitar exibir lixo se não puder converter
+            old_price = "" 
             pass
             
         image = extract_attr(soup, selectors["image"], "src")
         
-        if not image: # Tenta outros atributos se 'src' falhar (comum na Amazon)
+        if not image: 
             data_image_str = extract_attr(soup, selectors["image"], "data-a-dynamic-image")
             if data_image_str:
                 try:
                     img_dict = json.loads(data_image_str)
-                    # Pega a primeira URL válida no dicionário (geralmente a de maior resolução)
                     image = next(iter(img_dict.keys())) 
                 except (json.JSONDecodeError, StopIteration):
-                    pass # Ignora se não for JSON ou estiver vazio
+                    pass 
             
-            if not image: # Tenta data-src se ainda não tiver imagem (comum na Shopee)
+            if not image: 
                 image = extract_attr(soup, selectors["image"], "data-src")
 
-        # Converte URL relativa para absoluta se necessário
         if image and not image.startswith(('http://', 'https://')):
             base_url = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
-            # Certifica-se de que há apenas uma barra entre base_url e image
             image = base_url.rstrip('/') + '/' + image.lstrip('/')
 
+        # Definindo a variável 'description' antes de usá-la no dicionário product
+        description = extract_text(soup, selectors.get("description", ""))
 
         product = {
             "url": url,
@@ -202,7 +183,7 @@ def extract_product_info(url):
             "currency": currency, 
             "image": image if image else "https://via.placeholder.com/150?text=Sem+Imagem", 
             "domain": domain,
-            "description": description if description else "Descrição não disponível", 
+            "description": description if description else "Descrição não disponível", # 'description' agora garantidamente definida
             "store_name": store_name 
         }
         
@@ -213,7 +194,7 @@ def extract_product_info(url):
     except Exception as e:
         import traceback
         print(f"Erro inesperado ao processar o link {url}: {e}")
-        traceback.print_exc() # Imprime o traceback completo no log do Render
+        traceback.print_exc() 
         return {"error": f"Erro inesperado ao processar o link. Tente novamente mais tarde. Detalhes: {e}"}
 
 def generate_whatsapp_link(product_info):
@@ -242,14 +223,12 @@ def generate_whatsapp_link(product_info):
     whatsapp_message_parts.append("") # Linha em branco para espaçamento
 
     # 2. Preço "De" (riscado)
-    # Mostra "De" apenas se existir e for maior que o preço final.
     if old_price and old_price != "Preço não disponível":
         try:
-            # Garante que ambos são números antes de comparar
             if float(old_price) > float(price):
                 whatsapp_message_parts.append(f"~De {currency}{old_price}~")
         except ValueError:
-            pass # Ignora se a conversão para float falhar
+            pass 
         
     # 3. Preço "Por" com destaque e "no Pix"
     whatsapp_message_parts.append(f"*Por {currency}{price} no Pix*")
@@ -261,7 +240,7 @@ def generate_whatsapp_link(product_info):
     # 5. Link do Produto
     whatsapp_message_parts.append("") # Linha em branco antes do link
     whatsapp_message_parts.append("🛒 Link do Produto ⤵️")
-    whatsapp_message_parts.append(url) # O link em si, em nova linha para pré-visualização
+    whatsapp_message_parts.append(url) 
     
     # 6. Texto da Loja (agora dinâmico com o nome da loja)
     if store_name:
