@@ -20,10 +20,10 @@ WHATSAPP_PHONE_NUMBER = "5581973085768"
 SITE_SELECTORS = {
     "amazon.com": {
         "title": "#productTitle",
-        "price": "span.a-price span.a-offscreen", # ATUALIZADO
-        "old_price": "span.a-text-price span.a-offscreen", # ATUALIZADO
+        "price": "span.a-price span.a-offscreen", 
+        "old_price": "span.a-text-price span.a-offscreen", 
         "image": "#landingImage",
-        "currency": "span.a-price-symbol", # ATUALIZADO, geralmente dentro do preço
+        "currency": "span.a-price-symbol", 
         "description": "#productDescription span", 
         "store_name": "Amazon" 
     },
@@ -37,63 +37,82 @@ SITE_SELECTORS = {
         "store_name": "Mercado Livre" 
     },
     "aliexpress.com": {
-        "title": ".product-title-text",
-        "price": ".product-price-value",
-        "old_price": ".product-price-del .product-price-value", 
-        "image": ".magnifier-image",
-        "currency": ".product-price-currency",
-        "description": ".product-description-content", 
+        "title": "h1.product-title-text, .product-title-text", # ATUALIZADO
+        "price": "div.product-price-current span.currency-value, .product-price-value", # ATUALIZADO
+        "old_price": "div.product-price-original span.currency-value, .product-price-del .product-price-value", # ATUALIZADO
+        "image": ".magnifier-image, .image-view-magnifier-wrap img", # ATUALIZADO
+        "currency": "div.product-price-current span.currency-symbol, .product-price-currency", # ATUALIZADO
+        "description": ".product-description-content, div.product-description", # ATUALIZADO
         "store_name": "AliExpress" 
     },
     "shopee.com.br": { 
-        "title": "div[class^='_2EB2pM'], div[class^='_3O_Lg'], ._3yC_eA", 
-        "price": "div[class^='_2fXkC'], ._3gUuT", 
-        "old_price": "div[class^='_2o8hA'], ._3gUuT.line-through", 
-        "image": "div[class^='_2l-C4'] img, ._2aB7J img", 
-        "currency": "", 
-        "description": "div[class^='_3gUuT'], ._3gUuT", 
+        "title": "div.qa_sQ, ._3yC_eA, ._2EB2pM", # ATUALIZADO
+        "price": "div.qa_sW span, ._3gUuT, ._2fXkC", # ATUALIZADO
+        "old_price": "div.qa_sX span, ._3gUuT.line-through, ._2o8hA", # ATUALIZADO
+        "image": "div.flex.items-center.justify-center.relative.shopee-image-container img, ._2l-C4 img, ._2aB7J img", # ATUALIZADO
+        "currency": "div.qa_sW span", # Às vezes incluído no preço, mas adicionado seletor específico
+        "description": "div.Wk005g, ._3gUuT", # ATUALIZADO
         "store_name": "Shopee"
     },
 }
 
 def extract_text(soup, selector):
-    if isinstance(selector, list):
-        for s in selector:
-            element = soup.select_one(s)
+    if isinstance(selector, list) or isinstance(selector, str) and ',' in selector: # Se for lista ou string com múltiplos seletores
+        selectors = selector.split(',') if isinstance(selector, str) else selector
+        for s in selectors:
+            element = soup.select_one(s.strip())
             if element:
                 return element.get_text(strip=True)
         return ""
-    else:
+    else: # Se for um único seletor
         element = soup.select_one(selector)
         return element.get_text(strip=True) if element else ""
 
 def extract_attr(soup, selector, attr):
-    if isinstance(selector, list):
-        for s in selector:
-            element = soup.select_one(s)
+    if isinstance(selector, list) or isinstance(selector, str) and ',' in selector: # Se for lista ou string com múltiplos seletores
+        selectors = selector.split(',') if isinstance(selector, str) else selector
+        for s in selectors:
+            element = soup.select_one(s.strip())
             if element and attr in element.attrs:
                 return element[attr]
         return ""
-    else:
+    else: # Se for um único seletor
         element = soup.select_one(selector)
         return element[attr] if element and attr in element.attrs else ""
 
 def clean_price(price_text):
+    if not price_text:
+        return ""
+    # Remove espaços, quebras de linha e substitui vírgula por ponto
     price_text = price_text.replace(" ", "").replace("\n", "").replace(",", ".")
-    # Atualização: pegar apenas o primeiro número se houver vários, como "R$ 10,00 R$ 5,00"
-    match = re.search(r'(\d[\d\.,]*)', price_text)
+    # Remove qualquer texto que não seja dígito, ponto ou vírgula no início (para moedas)
+    price_text = re.sub(r'^[^\d\.]*', '', price_text)
+    
+    # Busca o primeiro número que pode ter vírgulas ou pontos como separador decimal
+    match = re.search(r'(\d[\d\.]*(?:,\d{2})?|\d[\d,]*(?:\.\d{2})?)', price_text)
     if match:
-        cleaned = match.group(1).replace(",", ".") 
+        cleaned = match.group(1).replace(",", ".") # Garante que o separador decimal é ponto
+        # Se tiver mais de um ponto (ex: 1.000.00), remove os pontos de milhar
+        if cleaned.count('.') > 1 and re.search(r'\.\d{3}', cleaned): # Ex: 1.234.56 -> 1234.56 (se tiver ponto antes de 3 digitos)
+            parts = cleaned.split('.')
+            if len(parts[-1]) == 2: # Se a última parte tem 2 dígitos, é decimal
+                cleaned = "".join(parts[:-1]) + "." + parts[-1]
+            else: # Caso contrário, remove todos os pontos
+                cleaned = "".join(parts)
         return cleaned
     return ""
 
 def extract_product_info(url):
     try:
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+            "Connection": "keep-alive"
         }
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status() # Lança um erro HTTP para códigos de status de erro (4xx ou 5xx)
+        response = requests.get(url, headers=headers, timeout=15) # Aumentado timeout para 15s
+        response.raise_for_status() 
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
@@ -110,39 +129,46 @@ def extract_product_info(url):
         if not selectors:
             return {"error": "Site não suportado. Tente Amazon, Mercado Livre, AliExpress ou Shopee."}
         
-        # Para Amazon, o preço e moeda podem vir no mesmo seletor
         title = extract_text(soup, selectors["title"])
         price_raw = extract_text(soup, selectors["price"])
+        currency = extract_text(soup, selectors.get("currency", "")) # Tenta pegar da moeda
         
-        # Tenta extrair a moeda do texto do preço se não houver um seletor específico ou se vier vazio
-        currency = extract_text(soup, selectors.get("currency", ""))
+        # Se a moeda não foi encontrada via seletor, tenta inferir do preço
         if not currency and "R$" in price_raw:
             currency = "R$"
         elif not currency and "$" in price_raw:
             currency = "$"
+        elif not currency and "€" in price_raw:
+            currency = "€"
         
         price = clean_price(price_raw) 
         
         old_price_raw = extract_text(soup, selectors.get("old_price", ""))
         old_price = clean_price(old_price_raw) if old_price_raw else "" 
-        
-        image = extract_attr(soup, selectors["image"], "src")
-        description = extract_text(soup, selectors.get("description", ""))
 
-        if not image:
-            # Tenta extrair imagem de atributos como 'data-a-dynamic-image' ou 'data-src'
-            image = extract_attr(soup, selectors["image"], "data-a-dynamic-image") or \
-                    extract_attr(soup, selectors["image"], "data-src")
+        # **LÓGICA PARA CORRIGIR VALORES INVERTIDOS**
+        # Se 'old_price' existir e for menor que 'price', inverte os valores
+        if old_price and price and float(old_price) < float(price):
+            temp_price = price
+            price = old_price
+            old_price = temp_price
+            
+        image = extract_attr(soup, selectors["image"], "src")
+        
+        if not image: # Tenta outros atributos se 'src' falhar
+            image = extract_attr(soup, selectors["image"], "data-a-dynamic-image")
             if image:
                 try:
                     import json
-                    # Se for um JSON, tenta pegar a primeira URL
                     img_dict = json.loads(image)
-                    image = next(iter(img_dict)) 
+                    # Pega a primeira URL válida no dicionário, que geralmente é a de maior resolução
+                    image = next(iter(img_dict.keys()))
                 except (json.JSONDecodeError, StopIteration):
-                    # Se não for JSON ou não tiver URLs, ignora
-                    pass 
-        
+                    pass # Ignora se não for JSON ou estiver vazio
+            
+            if not image: # Tenta data-src se ainda não tiver imagem
+                image = extract_attr(soup, selectors["image"], "data-src")
+
         if image and not image.startswith(('http://', 'https://')):
             base_url = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
             image = base_url + image if image.startswith('/') else base_url + '/' + image
@@ -153,7 +179,7 @@ def extract_product_info(url):
             "title": title if title else "Título não disponível",
             "price": price if price else "Preço não disponível",
             "old_price": old_price, 
-            "currency": currency if currency else "R$", # Default para R$ se não encontrar
+            "currency": currency if currency else "R$", 
             "image": image if image else "https://via.placeholder.com/150?text=Sem+Imagem", 
             "domain": domain,
             "description": description if description else "Descrição não disponível", 
@@ -163,10 +189,8 @@ def extract_product_info(url):
         return product
         
     except requests.exceptions.RequestException as e:
-        # Captura erros de requisição como falha de conexão, timeout, 4xx, 5xx
         return {"error": f"Erro ao acessar a URL: {e}. Verifique se o link está correto ou se o site está bloqueando requisições."}
     except Exception as e:
-        # Captura outros erros inesperados durante o processamento
         return {"error": f"Erro inesperado ao processar o link: {e}"}
 
 def generate_whatsapp_link(product_info):
@@ -195,9 +219,13 @@ def generate_whatsapp_link(product_info):
     whatsapp_message_parts.append("") # Linha em branco para espaçamento
 
     # 2. Preço "De" (riscado)
-    if old_price and old_price != "Preço não disponível" and old_price != price:
-        whatsapp_message_parts.append(f"~De {currency}{old_price}~")
-    
+    # Mostra "De" apenas se existir e for maior que o preço final.
+    try:
+        if old_price and price and float(old_price) > float(price):
+            whatsapp_message_parts.append(f"~De {currency}{old_price}~")
+    except ValueError:
+        pass # Ignora se a conversão para float falhar
+        
     # 3. Preço "Por" com destaque e "no Pix"
     whatsapp_message_parts.append(f"*Por {currency}{price} no Pix*")
     
