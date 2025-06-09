@@ -6,7 +6,7 @@ from urllib.parse import urlparse, quote
 import os
 import re
 import random 
-import json # Importar json é CRÍTICO!
+import json 
 
 app = Flask(__name__)
 CORS(app) 
@@ -172,7 +172,7 @@ def extract_product_info(url):
             base_url = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
             image = base_url.rstrip('/') + '/' + image.lstrip('/')
 
-        # Definindo a variável 'description' antes de usá-la no dicionário product
+        # Esta é a linha CRÍTICA para a variável 'description'
         description = extract_text(soup, selectors.get("description", ""))
 
         product = {
@@ -183,7 +183,7 @@ def extract_product_info(url):
             "currency": currency, 
             "image": image if image else "https://via.placeholder.com/150?text=Sem+Imagem", 
             "domain": domain,
-            "description": description if description else "Descrição não disponível", # 'description' agora garantidamente definida
+            "description": description if description else "Descrição não disponível", 
             "store_name": store_name 
         }
         
@@ -198,11 +198,6 @@ def extract_product_info(url):
         return {"error": f"Erro inesperado ao processar o link. Tente novamente mais tarde. Detalhes: {e}"}
 
 def generate_whatsapp_link(product_info):
-    """
-    Gera o link para compartilhar no WhatsApp com base nas informações do produto,
-    com a estrutura detalhada solicitada, cupom aleatório e nome da loja.
-    O link gerado será para o número de telefone especificado.
-    """
     title = product_info.get('title', 'Produto').replace('*', '').replace('_', '') 
     price = product_info.get('price', 'Preço não disponível')
     old_price = product_info.get('old_price', '') 
@@ -210,7 +205,6 @@ def generate_whatsapp_link(product_info):
     url = product_info['url'] 
     store_name = product_info.get('store_name', '') 
     
-    # --- Geração de Cupom Aleatório ---
     coupon_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     coupon_length = 8 
     random_coupon = ''.join(random.choice(coupon_chars) for i in range(coupon_length))
@@ -218,11 +212,9 @@ def generate_whatsapp_link(product_info):
     
     whatsapp_message_parts = []
 
-    # 1. Título do produto
     whatsapp_message_parts.append(f"*{title}*") 
-    whatsapp_message_parts.append("") # Linha em branco para espaçamento
+    whatsapp_message_parts.append("") 
 
-    # 2. Preço "De" (riscado)
     if old_price and old_price != "Preço não disponível":
         try:
             if float(old_price) > float(price):
@@ -230,36 +222,27 @@ def generate_whatsapp_link(product_info):
         except ValueError:
             pass 
         
-    # 3. Preço "Por" com destaque e "no Pix"
     whatsapp_message_parts.append(f"*Por {currency}{price} no Pix*")
     
-    # 4. Cupom de desconto (sempre gerado)
-    whatsapp_message_parts.append("") # Linha em branco antes do cupom
+    whatsapp_message_parts.append("") 
     whatsapp_message_parts.append(f"({CUPOM_TEXT})")
 
-    # 5. Link do Produto
-    whatsapp_message_parts.append("") # Linha em branco antes do link
+    whatsapp_message_parts.append("") 
     whatsapp_message_parts.append("🛒 Link do Produto ⤵️")
     whatsapp_message_parts.append(url) 
     
-    # 6. Texto da Loja (agora dinâmico com o nome da loja)
     if store_name:
         whatsapp_message_parts.append(f"\n🛒 Na {store_name}!!!") 
 
-    # 7. Assinatura
     whatsapp_message_parts.append("Via ProdLink!") 
 
     message_for_whatsapp = "\n".join(whatsapp_message_parts)
     
-    # --- ENVIAR PARA O NÚMERO INDIVIDUAL ---
     whatsapp_url = f"https://api.whatsapp.com/send?phone={WHATSAPP_PHONE_NUMBER}&text={quote(message_for_whatsapp)}"
     return whatsapp_url
 
 @app.route('/api/process_product_link', methods=['POST'])
 def process_product_link():
-    """
-    Endpoint da API que recebe a URL do frontend, processa e retorna as informações.
-    """
     data = request.get_json()
     url = data.get('url', '').strip()
     
@@ -281,7 +264,6 @@ def process_product_link():
 
 @app.route('/')
 def home():
-    """Rota de teste simples para verificar se o backend está online."""
     return "ProdLink Backend está online! Use a rota /api/process_product_link para processar links."
 
 if __name__ == '__main__':
