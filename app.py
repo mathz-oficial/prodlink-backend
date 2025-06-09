@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urlparse, quote # Importação corrigida: 'quote' vem de 'urllib.parse'
+from urllib.parse import urlparse, quote 
 import os
 import re
 import random 
@@ -11,11 +11,8 @@ app = Flask(__name__)
 CORS(app) 
 
 # --- Configurações Importantes ---
-# Link de convite do seu grupo do WhatsApp, já inserido.
-WHATSAPP_GROUP_INVITE_LINK = os.environ.get("WHATSAPP_GROUP_INVITE_LINK", "https://chat.whatsapp.com/ByyFqFS3mkoAw6jFlBxFmG") 
-
-# Sua assinatura, já inserida.
-SUA_ASSINATURA = "Via ProdLink!" 
+# **NÚMERO DE TELEFONE PARA O WHATSAPP - JÁ INSERIDO**
+WHATSAPP_PHONE_NUMBER = "5581973085768"
 
 # Dicionário com seletores CSS para extrair informações dos sites.
 # EXTREMAMENTE IMPORTANTE: Seletores são sensíveis a mudanças no site.
@@ -161,7 +158,7 @@ def generate_whatsapp_link(product_info):
     """
     Gera o link para compartilhar no WhatsApp com base nas informações do produto,
     com a estrutura detalhada solicitada, cupom aleatório e nome da loja.
-    O link gerado será para o grupo de WhatsApp especificado.
+    O link gerado será para o número de telefone especificado.
     """
     title = product_info.get('title', 'Produto').replace('*', '').replace('_', '') 
     price = product_info.get('price', 'Preço não disponível')
@@ -176,7 +173,7 @@ def generate_whatsapp_link(product_info):
     random_coupon = ''.join(random.choice(coupon_chars) for i in range(coupon_length))
     CUPOM_TEXT = f"🔖Utilize o Cupom: {random_coupon}" 
     
-    # SUA_ASSINATURA já está definida globalmente no topo do arquivo.
+    # A assinatura "Via ProdLink!" será incluída diretamente na mensagem.
     
     whatsapp_message_parts = []
 
@@ -204,16 +201,14 @@ def generate_whatsapp_link(product_info):
     if store_name:
         whatsapp_message_parts.append(f"\n🛒 Na {store_name}!!!") 
 
-    # 7. Sua assinatura 
-    if SUA_ASSINATURA:
-        whatsapp_message_parts.append(f"{SUA_ASSINATURA}") 
+    # 7. Assinatura
+    whatsapp_message_parts.append("Via ProdLink!") 
 
     message_for_whatsapp = "\n".join(whatsapp_message_parts)
     
-    # --- MUDANÇA PARA ENVIAR PARA O GRUPO ---
-    # Usamos o link de convite do grupo e anexamos o texto codificado.
-    # O WhatsApp abrirá o grupo e a mensagem pré-preenchida para o usuário encaminhar.
-    whatsapp_url = f"{WHATSAPP_GROUP_INVITE_LINK}?text={quote(message_for_whatsapp)}" 
+    # --- MUDANÇA PARA ENVIAR PARA O NÚMERO INDIVIDUAL ---
+    # Usamos o número de telefone e anexamos o texto codificado.
+    whatsapp_url = f"https://api.whatsapp.com/send?phone={WHATSAPP_PHONE_NUMBER}&text={quote(message_for_whatsapp)}"
     return whatsapp_url
 
 @app.route('/api/process_product_link', methods=['POST'])
