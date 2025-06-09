@@ -204,7 +204,7 @@ def generate_whatsapp_link(product_info):
 
     # 7. Sua assinatura 
     if SUA_ASSINATURA:
-        whatsapp_message_parts.append(f"{🚀 Via ProdLink!}") 
+        whatsapp_message_parts.append(f"{ Via ProdLink!}") 
 
     message_for_whatsapp = "\n".join(whatsapp_message_parts)
     
