@@ -199,7 +199,8 @@ def generate_whatsapp_link(product_info):
     
     # 6. Texto da Loja (agora dinâmico com o nome da loja)
     if store_name:
-        whatsapp_message_parts.append(f"\n🛒 Na {store_name}!!!") # Usa o nome da loja extraído
+        # Aqui, estamos usando o nome da loja extraído.
+        whatsapp_message_parts.append(f"\n🛒 Na {store_name}!!!") 
 
     # 7. Sua assinatura 
     if SUA_ASSINATURA:
