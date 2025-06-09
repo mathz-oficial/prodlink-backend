@@ -12,7 +12,7 @@ CORS(app)
 
 # --- Configurações Importantes ---
 # **SUBSTITUA "SEU_LINK_DE_CONVITE_DO_GRUPO_AQUI" PELO SEU LINK REAL!**
-WHATSAPP_GROUP_INVITE_LINK = os.environ.get("WHATSAPP_GROUP_INVITE_LINK"https://chat.whatsapp.com/ByyFqFS3mkoAw6jFlBxFmG") 
+WHATSAPP_GROUP_INVITE_LINK = os.environ.get("WHATSAPP_GROUP_INVITE_LINK", "https://chat.whatsapp.com/ByyFqFS3mkoAw6jFlBxFmG") 
 
 # Dicionário com seletores CSS para extrair informações dos sites.
 # EXTREMAMENTE IMPORTANTE: Seletores são sensíveis a mudanças no site.
