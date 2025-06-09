@@ -20,10 +20,10 @@ WHATSAPP_PHONE_NUMBER = "5581973085768"
 SITE_SELECTORS = {
     "amazon.com": {
         "title": "#productTitle",
-        "price": ".a-price-whole", 
-        "old_price": ".a-text-price .a-offscreen", 
+        "price": "span.a-price span.a-offscreen", # ATUALIZADO
+        "old_price": "span.a-text-price span.a-offscreen", # ATUALIZADO
         "image": "#landingImage",
-        "currency": ".a-price-symbol", 
+        "currency": "span.a-price-symbol", # ATUALIZADO, geralmente dentro do preço
         "description": "#productDescription span", 
         "store_name": "Amazon" 
     },
@@ -80,6 +80,7 @@ def extract_attr(soup, selector, attr):
 
 def clean_price(price_text):
     price_text = price_text.replace(" ", "").replace("\n", "").replace(",", ".")
+    # Atualização: pegar apenas o primeiro número se houver vários, como "R$ 10,00 R$ 5,00"
     match = re.search(r'(\d[\d\.,]*)', price_text)
     if match:
         cleaned = match.group(1).replace(",", ".") 
@@ -92,7 +93,7 @@ def extract_product_info(url):
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         }
         response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
+        response.raise_for_status() # Lança um erro HTTP para códigos de status de erro (4xx ou 5xx)
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
@@ -109,25 +110,37 @@ def extract_product_info(url):
         if not selectors:
             return {"error": "Site não suportado. Tente Amazon, Mercado Livre, AliExpress ou Shopee."}
         
+        # Para Amazon, o preço e moeda podem vir no mesmo seletor
         title = extract_text(soup, selectors["title"])
         price_raw = extract_text(soup, selectors["price"])
+        
+        # Tenta extrair a moeda do texto do preço se não houver um seletor específico ou se vier vazio
+        currency = extract_text(soup, selectors.get("currency", ""))
+        if not currency and "R$" in price_raw:
+            currency = "R$"
+        elif not currency and "$" in price_raw:
+            currency = "$"
+        
         price = clean_price(price_raw) 
         
         old_price_raw = extract_text(soup, selectors.get("old_price", ""))
         old_price = clean_price(old_price_raw) if old_price_raw else "" 
         
-        currency = extract_text(soup, selectors.get("currency", ""))
         image = extract_attr(soup, selectors["image"], "src")
         description = extract_text(soup, selectors.get("description", ""))
 
         if not image:
-            image = extract_attr(soup, selectors["image"], "data-a-dynamic-image") 
+            # Tenta extrair imagem de atributos como 'data-a-dynamic-image' ou 'data-src'
+            image = extract_attr(soup, selectors["image"], "data-a-dynamic-image") or \
+                    extract_attr(soup, selectors["image"], "data-src")
             if image:
                 try:
                     import json
+                    # Se for um JSON, tenta pegar a primeira URL
                     img_dict = json.loads(image)
                     image = next(iter(img_dict)) 
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, StopIteration):
+                    # Se não for JSON ou não tiver URLs, ignora
                     pass 
         
         if image and not image.startswith(('http://', 'https://')):
@@ -140,7 +153,7 @@ def extract_product_info(url):
             "title": title if title else "Título não disponível",
             "price": price if price else "Preço não disponível",
             "old_price": old_price, 
-            "currency": currency,
+            "currency": currency if currency else "R$", # Default para R$ se não encontrar
             "image": image if image else "https://via.placeholder.com/150?text=Sem+Imagem", 
             "domain": domain,
             "description": description if description else "Descrição não disponível", 
@@ -150,8 +163,10 @@ def extract_product_info(url):
         return product
         
     except requests.exceptions.RequestException as e:
-        return {"error": f"Erro ao acessar a URL: {e}. Verifique se o link está correto."}
+        # Captura erros de requisição como falha de conexão, timeout, 4xx, 5xx
+        return {"error": f"Erro ao acessar a URL: {e}. Verifique se o link está correto ou se o site está bloqueando requisições."}
     except Exception as e:
+        # Captura outros erros inesperados durante o processamento
         return {"error": f"Erro inesperado ao processar o link: {e}"}
 
 def generate_whatsapp_link(product_info):
@@ -172,8 +187,6 @@ def generate_whatsapp_link(product_info):
     coupon_length = 8 
     random_coupon = ''.join(random.choice(coupon_chars) for i in range(coupon_length))
     CUPOM_TEXT = f"🔖Utilize o Cupom: {random_coupon}" 
-    
-    # A assinatura "Via ProdLink!" será incluída diretamente na mensagem.
     
     whatsapp_message_parts = []
 
@@ -206,8 +219,7 @@ def generate_whatsapp_link(product_info):
 
     message_for_whatsapp = "\n".join(whatsapp_message_parts)
     
-    # --- MUDANÇA PARA ENVIAR PARA O NÚMERO INDIVIDUAL ---
-    # Usamos o número de telefone e anexamos o texto codificado.
+    # --- ENVIAR PARA O NÚMERO INDIVIDUAL ---
     whatsapp_url = f"https://api.whatsapp.com/send?phone={WHATSAPP_PHONE_NUMBER}&text={quote(message_for_whatsapp)}"
     return whatsapp_url
 
