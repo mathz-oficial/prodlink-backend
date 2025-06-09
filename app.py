@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote # <<< CORREÇÃO AQUI: adicionei 'quote'
 import os
 import re
 import random 
@@ -12,7 +12,7 @@ CORS(app)
 
 # --- Configurações Importantes ---
 # **SUBSTITUA "SEU_LINK_DE_CONVITE_DO_GRUPO_AQUI" PELO SEU LINK REAL!**
-WHATSAPP_GROUP_INVITE_LINK = os.environ.get("WHATSAPP_GROUP_INVITE_LINK", "https://chat.whatsapp.com/ByyFqFS3mkoAw6jFlBxFmG") 
+WHATSAPP_GROUP_INVITE_LINK = os.environ.get("WHATSAPP_GROUP_INVITE_LINK"https://chat.whatsapp.com/ByyFqFS3mkoAw6jFlBxFmG") 
 
 # Dicionário com seletores CSS para extrair informações dos sites.
 # EXTREMAMENTE IMPORTANTE: Seletores são sensíveis a mudanças no site.
@@ -199,7 +199,6 @@ def generate_whatsapp_link(product_info):
     
     # 6. Texto da Loja (agora dinâmico com o nome da loja)
     if store_name:
-        # Aqui, estamos usando o nome da loja extraído.
         whatsapp_message_parts.append(f"\n🛒 Na {store_name}!!!") 
 
     # 7. Sua assinatura 
@@ -211,7 +210,7 @@ def generate_whatsapp_link(product_info):
     # --- MUDANÇA PARA ENVIAR PARA O GRUPO ---
     # Usamos o link de convite do grupo e anexamos o texto codificado.
     # O WhatsApp abrirá o grupo e a mensagem pré-preenchida para o usuário encaminhar.
-    whatsapp_url = f"{WHATSAPP_GROUP_INVITE_LINK}?text={requests.utils.quote(message_for_whatsapp)}"
+    whatsapp_url = f"{WHATSAPP_GROUP_INVITE_LINK}?text={quote(message_for_whatsapp)}" # <<< CORREÇÃO AQUI: usei 'quote'
     return whatsapp_url
 
 @app.route('/api/process_product_link', methods=['POST'])
