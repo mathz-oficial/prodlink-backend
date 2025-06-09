@@ -25,23 +25,29 @@ SITE_SELECTORS = {
     "amazon.com": {
         "title": "#productTitle",
         "price": ".a-price-whole", # Preço principal
+        "old_price": ".a-text-price .a-offscreen", # Preço "De" (riscado)
         "image": "#landingImage",
         "currency": ".a-price-symbol", # Símbolo da moeda
-        "description": "#productDescription span" # Descrição
+        "description": "#productDescription span", # Descrição
+        "store_name": "Amazon" # Nome fixo para Amazon
     },
     "mercadolivre.com.br": {
         "title": ".ui-pdp-title",
         "price": ".andes-money-amount__fraction",
+        "old_price": ".ui-pdp-price__second-line .andes-money-amount__fraction", # Preço "De"
         "image": ".ui-pdp-gallery__figure img",
         "currency": ".andes-money-amount__currency-symbol",
-        "description": ".ui-pdp-description__content"
+        "description": ".ui-pdp-description__content",
+        "store_name": "Mercado Livre" # Nome fixo para Mercado Livre
     },
     "aliexpress.com": {
         "title": ".product-title-text",
         "price": ".product-price-value",
+        "old_price": ".product-price-del .product-price-value", # Preço "De"
         "image": ".magnifier-image",
         "currency": ".product-price-currency",
-        "description": ".product-description-content" # Pode variar bastante no Ali
+        "description": ".product-description-content", # Pode variar bastante no Ali
+        "store_name": "AliExpress" # Nome fixo para AliExpress
     },
 }
 
@@ -77,26 +83,32 @@ def extract_product_info(url):
         }
         response = requests.get(url, headers=headers, timeout=10) # Timeout para evitar travamentos
         response.raise_for_status() # Lança um erro para status HTTP ruins (4xx ou 5xx)
-
+        
         soup = BeautifulSoup(response.text, 'html.parser')
-
+        
         # Extrai o domínio da URL (ex: amazon.com, mercadolivre.com.br)
         domain = urlparse(url).netloc.replace("www.", "")
-
+        
         selectors = None
+        store_name = ""
         # Procura qual site na nossa lista o domínio corresponde
         for site_key, site_data in SITE_SELECTORS.items():
             if site_key in domain:
                 selectors = site_data
+                store_name = site_data.get("store_name", "") # Pega o nome da loja
                 break
-
+        
         if not selectors:
             return {"error": "Site não suportado. Tente Amazon, Mercado Livre ou AliExpress."}
-
+        
         # --- Extração de dados ---
         title = extract_text(soup, selectors["title"])
         price_raw = extract_text(soup, selectors["price"])
         price = clean_price(price_raw) # Limpa o preço
+        
+        old_price_raw = extract_text(soup, selectors.get("old_price", "")) # Novo: preço "De"
+        old_price = clean_price(old_price_raw) if old_price_raw else "" # Limpa o preço antigo
+        
         currency = extract_text(soup, selectors.get("currency", ""))
         image = extract_attr(soup, selectors["image"], "src")
         description = extract_text(soup, selectors.get("description", ""))
@@ -113,7 +125,7 @@ def extract_product_info(url):
                     image = next(iter(img_dict)) # Pega a primeira chave (URL da imagem)
                 except json.JSONDecodeError:
                     pass # Se não for JSON, mantém o que for.
-
+        
         # Adiciona verificação para URL de imagem que pode estar faltando o esquema (http/https)
         if image and not image.startswith(('http://', 'https://')):
             # Tenta construir uma URL absoluta. Pode precisar de mais lógica para domínios complexos.
@@ -125,14 +137,16 @@ def extract_product_info(url):
             "url": url,
             "title": title if title else "Título não disponível",
             "price": price if price else "Preço não disponível",
+            "old_price": old_price, # Adiciona o preço antigo
             "currency": currency,
             "image": image if image else "https://via.placeholder.com/150?text=Sem+Imagem", # Imagem padrão
             "domain": domain,
-            "description": description if description else "Descrição não disponível" # Nova feature
+            "description": description if description else "Descrição não disponível", # Nova feature
+            "store_name": store_name # Adiciona o nome da loja
         }
-
+        
         return product
-
+        
     except requests.exceptions.RequestException as e:
         return {"error": f"Erro ao acessar a URL: {e}. Verifique se o link está correto."}
     except Exception as e:
@@ -142,15 +156,29 @@ def generate_whatsapp_link(product_info):
     """Gera o link para compartilhar no WhatsApp com base nas informações do produto."""
     title = product_info.get('title', 'Produto').replace('*', '').replace('_', '') # Remove markdown para não conflitar
     price = product_info.get('price', 'Preço não disponível')
+    old_price = product_info.get('old_price', '') # Pega o preço antigo
     currency = product_info.get('currency', '')
     url = product_info['url']
+    store_name = product_info.get('store_name', '') # Pega o nome da loja
+    
+    # Monta a mensagem que aparecerá no WhatsApp com a nova estrutura
+    whatsapp_message_parts = []
+    whatsapp_message_parts.append(f"*{title}*") # Título em negrito
 
-    # Monta a mensagem que aparecerá no WhatsApp
-    message = f"Confira este produto!\n\n"
-    message += f"📦 *{title}*\n"
-    message += f"💰 *Preço:* {currency}{price}\n"
-    message += f"🔗 *Link:* {url}\n\n"
-    message += f"🚀 Via ProdLink!" # Um pequeno "branding"
+    if old_price and old_price != "Preço não disponível":
+        whatsapp_message_parts.append(f"De: {currency}{old_price}")
+    
+    whatsapp_message_parts.append(f"Por: {currency}{price}")
+    whatsapp_message_parts.append(f"Link do Produto\n{url}") # Quebra de linha para o link
+
+    # Adicionar o nome da loja
+    if store_name:
+        whatsapp_message_parts.append(f"\nNa {store_name}!!!") # Adiciona uma linha em branco antes da loja
+
+    # Adicionar sua assinatura (OPCIONAL: SUBSTITUA "Seu Nome Aqui" pelo seu nome ou apelido)
+    whatsapp_message_parts.append("\n~ 🚀 Via ProdLink!") # Adiciona uma linha em branco antes da assinatura
+
+    message = "\n".join(whatsapp_message_parts)
 
     # Codifica a mensagem para URL (necessário para caracteres especiais e espaços)
     whatsapp_url = f"{WHATSAPP_API_URL}?phone={WHATSAPP_PHONE_NUMBER}&text={requests.utils.quote(message)}"
@@ -163,22 +191,22 @@ def process_product_link():
     """
     data = request.get_json()
     url = data.get('url', '').strip()
-
+    
     if not url:
         return jsonify({"error": "A URL do produto é obrigatória."}), 400
-
+    
     # Verifica se a URL é válida (melhoria: validação básica)
     if not url.startswith(('http://', 'https://')):
         return jsonify({"error": "Formato de URL inválido. Use 'http://' ou 'https://'."}), 400
 
     product_info = extract_product_info(url)
-
+    
     if "error" in product_info:
         return jsonify(product_info), 400 # Retorna o erro específico do scraping
-
+    
     whatsapp_link = generate_whatsapp_link(product_info)
     product_info["whatsapp_link"] = whatsapp_link
-
+    
     return jsonify(product_info)
 
 @app.route('/')
