@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urlparse, quote # <<< CORREÇÃO AQUI: adicionei 'quote'
+from urllib.parse import urlparse, quote # Importação corrigida: 'quote' vem de 'urllib.parse'
 import os
 import re
 import random 
@@ -11,8 +11,11 @@ app = Flask(__name__)
 CORS(app) 
 
 # --- Configurações Importantes ---
-# **SUBSTITUA "SEU_LINK_DE_CONVITE_DO_GRUPO_AQUI" PELO SEU LINK REAL!**
+# Link de convite do seu grupo do WhatsApp, já inserido.
 WHATSAPP_GROUP_INVITE_LINK = os.environ.get("WHATSAPP_GROUP_INVITE_LINK", "https://chat.whatsapp.com/ByyFqFS3mkoAw6jFlBxFmG") 
+
+# Sua assinatura, já inserida.
+SUA_ASSINATURA = "Via ProdLink!" 
 
 # Dicionário com seletores CSS para extrair informações dos sites.
 # EXTREMAMENTE IMPORTANTE: Seletores são sensíveis a mudanças no site.
@@ -173,7 +176,7 @@ def generate_whatsapp_link(product_info):
     random_coupon = ''.join(random.choice(coupon_chars) for i in range(coupon_length))
     CUPOM_TEXT = f"🔖Utilize o Cupom: {random_coupon}" 
     
-    SUA_ASSINATURA = "~ Seu Nome Aqui" # SUBSTITUA PELO SEU NOME REAL AQUI
+    # SUA_ASSINATURA já está definida globalmente no topo do arquivo.
     
     whatsapp_message_parts = []
 
@@ -203,14 +206,14 @@ def generate_whatsapp_link(product_info):
 
     # 7. Sua assinatura 
     if SUA_ASSINATURA:
-        whatsapp_message_parts.append(f"{ Via ProdLink!}") 
+        whatsapp_message_parts.append(f"{SUA_ASSINATURA}") 
 
     message_for_whatsapp = "\n".join(whatsapp_message_parts)
     
     # --- MUDANÇA PARA ENVIAR PARA O GRUPO ---
     # Usamos o link de convite do grupo e anexamos o texto codificado.
     # O WhatsApp abrirá o grupo e a mensagem pré-preenchida para o usuário encaminhar.
-    whatsapp_url = f"{WHATSAPP_GROUP_INVITE_LINK}?text={quote(message_for_whatsapp)}" # <<< CORREÇÃO AQUI: usei 'quote'
+    whatsapp_url = f"{WHATSAPP_GROUP_INVITE_LINK}?text={quote(message_for_whatsapp)}" 
     return whatsapp_url
 
 @app.route('/api/process_product_link', methods=['POST'])
