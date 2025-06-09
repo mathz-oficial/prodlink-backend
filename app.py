@@ -11,16 +11,12 @@ app = Flask(__name__)
 CORS(app) 
 
 # --- Configurações Importantes ---
-# Não usaremos mais WHATSAPP_PHONE_NUMBER diretamente.
-# Em vez disso, usaremos o link de convite do grupo.
 # **SUBSTITUA "SEU_LINK_DE_CONVITE_DO_GRUPO_AQUI" PELO SEU LINK REAL!**
-WHATSAPP_GROUP_INVITE_LINK = os.environ.get("WHATSAPP_GROUP_INVITE_LINK", "vhttps://chat.whatsapp.com/ByyFqFS3mkoAw6jFlBxFmG") 
-
-# WHATSAPP_API_URL não será mais usado diretamente para criar o link,
-# pois o link de convite já inclui a base.
-# WHATSAPP_API_URL = "https://api.whatsapp.com/send" 
+WHATSAPP_GROUP_INVITE_LINK = os.environ.get("WHATSAPP_GROUP_INVITE_LINK", "https://chat.whatsapp.com/ByyFqFS3mkoAw6jFlBxFmG") 
 
 # Dicionário com seletores CSS para extrair informações dos sites.
+# EXTREMAMENTE IMPORTANTE: Seletores são sensíveis a mudanças no site.
+# Se um site mudar sua estrutura HTML, você precisará atualizar os seletores aqui.
 SITE_SELECTORS = {
     "amazon.com": {
         "title": "#productTitle",
@@ -201,7 +197,7 @@ def generate_whatsapp_link(product_info):
     whatsapp_message_parts.append("🛒 Link do Produto ⤵️")
     whatsapp_message_parts.append(url) # O link em si, em nova linha para pré-visualização
     
-    # 6. Texto da Loja (agora dinâmico)
+    # 6. Texto da Loja (agora dinâmico com o nome da loja)
     if store_name:
         whatsapp_message_parts.append(f"\n🛒 Na {store_name}!!!") # Usa o nome da loja extraído
 
@@ -211,7 +207,7 @@ def generate_whatsapp_link(product_info):
 
     message_for_whatsapp = "\n".join(whatsapp_message_parts)
     
-    # --- MUDANÇA PRINCIPAL PARA ENVIAR PARA O GRUPO ---
+    # --- MUDANÇA PARA ENVIAR PARA O GRUPO ---
     # Usamos o link de convite do grupo e anexamos o texto codificado.
     # O WhatsApp abrirá o grupo e a mensagem pré-preenchida para o usuário encaminhar.
     whatsapp_url = f"{WHATSAPP_GROUP_INVITE_LINK}?text={requests.utils.quote(message_for_whatsapp)}"
